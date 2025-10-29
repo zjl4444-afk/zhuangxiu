@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>装修费用管理系统</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#3B82F6',
+                        secondary: '#10B981',
+                        accent: '#F59E0B',
+                        neutral: '#6B7280',
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .content-auto {
+                content-visibility: auto;
+            }
+            .card-shadow {
+                box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 font-sans">
+    <!-- 顶部导航 -->
+    <nav class="bg-primary text-white shadow-md">
+        <div class="container mx-auto px-4 py-3 flex justify-between items-center">
+            <h1 class="text-xl md:text-2xl font-bold">
+                <i class="fa fa-home mr-2"></i>装修费用管理系统
+            </h1>
+            <button id="addBtn" class="bg-white text-primary px-4 py-2 rounded-md hover:bg-gray-100 transition">
+                <i class="fa fa-plus mr-1"></i>添加记录
+            </button>
+        </div>
+    </nav>
+
+    <main class="container mx-auto px-4 py-6">
+        <!-- 统计概览 -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div class="bg-white rounded-lg p-4 card-shadow">
+                <h3 class="text-neutral text-sm mb-1">总费用</h3>
+                <p id="totalAmount" class="text-2xl font-bold text-primary">¥0.00</p>
+            </div>
+            <div class="bg-white rounded-lg p-4 card-shadow">
+                <h3 class="text-neutral text-sm mb-1">记录总数</h3>
+                <p id="totalCount" class="text-2xl font-bold text-secondary">0</p>
+            </div>
+            <div class="bg-white rounded-lg p-4 card-shadow">
+                <h3 class="text-neutral text-sm mb-1">平均每项费用</h3>
+                <p id="averageAmount" class="text-2xl font-bold text-accent">¥0.00</p>
+            </div>
+        </div>
+
+        <!-- 图表分析 -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            <div class="bg-white rounded-lg p-4 card-shadow">
+                <h3 class="text-lg font-semibold mb-4">按支付人统计</h3>
+                <div class="h-64">
+                    <canvas id="payerChart"></canvas>
+                </div>
+            </div>
+            <div class="bg-white rounded-lg p-4 card-shadow">
+                <h3 class="text-lg font-semibold mb-4">按项目类型统计</h3>
+                <div class="h-64">
+                    <canvas id="projectChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- 数据表格 -->
+        <div class="bg-white rounded-lg card-shadow overflow-hidden">
+            <div class="p-4 border-b">
+                <h2 class="text-lg font-semibold">费用明细</h2>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-neutral uppercase tracking-wider">序号</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-neutral uppercase tracking-wider">项目名称</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-neutral uppercase tracking-wider">金额</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-neutral uppercase tracking-wider">支付人</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-neutral uppercase tracking-wider">日期</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-neutral uppercase tracking-wider">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="expenseTableBody" class="bg-white divide-y divide-gray-200">
+                        <!-- 数据将通过JS动态填充 -->
+                        <tr>
+                            <td colspan="6" class="px-6 py-10 text-center text-neutral">
+                                <i class="fa fa-spinner fa-spin mr-2"></i>加载数据中...
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <!-- 添加/编辑记录模态框 -->
+    <div id="modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+        <div class="bg-white rounded-lg w-full max-w-md mx-4">
+            <div class="p-4 border-b flex justify-between items-center">
+                <h3 id="modalTitle" class="text-lg font-semibold">添加费用记录</h3>
+                <button id="closeModal" class="text-neutral hover:text-gray-800">
+                    <i class="fa fa-times"></i>
+                </button>
+            </div>
+            <form id="expenseForm" class="p-4">
+                <input type="hidden" id="recordId">
+                <div class="mb-4">
+                    <label for="serialNumber" class="block text-sm font-medium text-neutral mb-1">序号</label>
+                    <input type="number" id="serialNumber" class="w-full px-3 py-2 border border-gray-300 rounded-md" required>
+                </div>
+                <div class="mb-4">
+                    <label for="projectName" class="block text-sm font-medium text-neutral mb-1">项目名称</label>
+                    <input type="text" id="projectName" class="w-full px-3 py-2 border border-gray-300 rounded-md" required>
+                </div>
+                <div class="mb-4">
+                    <label for="amount" class="block text-sm font-medium text-neutral mb-1">金额 (元)</label>
+                    <input type="number" step="0.01" id="amount" class="w-full px-3 py-2 border border-gray-300 rounded-md" required>
+                </div>
+                <div class="mb-4">
+                    <label for="payer" class="block text-sm font-medium text-neutral mb-1">支付人</label>
+                    <select id="payer" class="w-full px-3 py-2 border border-gray-300 rounded-md" required>
+                        <option value="">请选择支付人</option>
+                        <option value="朱金亮">朱金亮</option>
+                        <option value="韦春梅">韦春梅</option>
+                    </select>
+                </div>
+                <div class="mb-4">
+                    <label for="date" class="block text-sm font-medium text-neutral mb-1">日期</label>
+                    <input type="date" id="date" class="w-full px-3 py-2 border border-gray-300 rounded-md" required>
+                </div>
+                <div class="flex justify-end space-x-2">
+                    <button type="button" id="cancelBtn" class="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50">取消</button>
+                    <button type="submit" class="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90">保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // 全局变量
+        let expenseRecords = [];
+        let payerChart, projectChart;
+        const STORAGE_KEY = 'decoration_expenses';
+        const PAYERS = ['朱金亮', '韦春梅']; // 支付人选项
+
+        // DOM 元素
+        const modal = document.getElementById('modal');
+        const addBtn = document.getElementById('addBtn');
+        const closeModal = document.getElementById('closeModal');
+        const cancelBtn = document.getElementById('cancelBtn');
+        const expenseForm = document.getElementById('expenseForm');
+        const expenseTableBody = document.getElementById('expenseTableBody');
+        const totalAmountEl = document.getElementById('totalAmount');
+        const totalCountEl = document.getElementById('totalCount');
+        const averageAmountEl = document.getElementById('averageAmount');
+
+        // 初始化图表
+        function initCharts() {
+            const payerCtx = document.getElementById('payerChart').getContext('2d');
+            const projectCtx = document.getElementById('projectChart').getContext('2d');
+
+            payerChart = new Chart(payerCtx, {
+                type: 'pie',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        data: [],
+                        backgroundColor: [
+                            '#3B82F6', '#10B981', '#F59E0B', '#EF4444', 
+                            '#8B5CF6', '#EC4899', '#6366F1', '#14B8A6'
+                        ]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false
+                }
+            });
+
+            projectChart = new Chart(projectCtx, {
+                type: 'bar',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: '金额 (元)',
+                        data: [],
+                        backgroundColor: '#3B82F6'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: { beginAtZero: true }
+                    }
+                }
+            });
+        }
+
+        // 格式化金额
+        function formatCurrency(amount) {
+            return '¥' + parseFloat(amount).toFixed(2);
+        }
+
+        // 初始化示例数据（首次使用时）
+        function initSampleData() {
+            const sampleData = [
+                {
+                    id: '1',
+                    serialNumber: 1,
+                    projectName: '墙面处理',
+                    amount: 1200,
+                    payer: '朱金亮',
+                    date: '2023-06-10',
+                    updatedAt: new Date().toISOString()
+                },
+                {
+                    id: '2',
+                    serialNumber: 2,
+                    projectName: '地板购买',
+                    amount: 3500,
+                    payer: '韦春梅',
+                    date: '2023-06-15',
+                    updatedAt: new Date().toISOString()
+                }
+            ];
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(sampleData));
+            return sampleData;
+        }
+
+        // 加载本地数据
+        function loadData() {
+            try {
+                const savedData = localStorage.getItem(STORAGE_KEY);
+                if (savedData) {
+                    expenseRecords = JSON.parse(savedData);
+                } else {
+                    // 首次使用，添加示例数据
+                    expenseRecords = initSampleData();
+                }
+                // 按序号排序
+                expenseRecords.sort((a, b) => a.serialNumber - b.serialNumber);
+                updateUI();
+            } catch (error) {
+                console.error('加载数据失败:', error);
+                expenseTableBody.innerHTML = '<tr><td colspan="6" class="px-6 py-10 text-center text-red-500">加载数据失败，请刷新页面重试</td></tr>';
+            }
+        }
+
+        // 保存数据到本地
+        function saveData() {
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(expenseRecords));
+                return true;
+            } catch (error) {
+                console.error('保存数据失败:', error);
+                alert('保存失败，请重试');
+                return false;
+            }
+        }
+
+        // 更新UI
+        function updateUI() {
+            updateTable();
+            updateStatistics();
+            updateCharts();
+        }
+
+        // 更新表格
+        function updateTable() {
+            if (expenseRecords.length === 0) {
+                expenseTableBody.innerHTML = '<tr><td colspan="6" class="px-6 py-10 text-center text-neutral">暂无数据，请添加费用记录</td></tr>';
+                return;
+            }
+
+            let html = '';
+            expenseRecords.forEach(record => {
+                html += `
+                <tr>
+                    <td class="px-6 py-4 whitespace-nowrap">${record.serialNumber}</td>
+                    <td class="px-6 py-4">${record.projectName}</td>
+                    <td class="px-6 py-4 whitespace-nowrap font-medium">${formatCurrency(record.amount)}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">${record.payer || '-'}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">${record.date}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <button onclick="editRecord('${record.id}')" class="text-primary hover:text-primary/80 mr-3">
+                            <i class="fa fa-pencil"></i>
+                        </button>
+                        <button onclick="deleteRecord('${record.id}')" class="text-red-500 hover:text-red-600">
+                            <i class="fa fa-trash"></i>
+                        </button>
+                    </td>
+                </tr>
+                `;
+            });
+            expenseTableBody.innerHTML = html;
+        }
+
+        // 更新统计信息
+        function updateStatistics() {
+            const totalAmount = expenseRecords.reduce((sum, record) => sum + parseFloat(record.amount), 0);
+            const totalCount = expenseRecords.length;
+            const averageAmount = totalCount > 0 ? totalAmount / totalCount : 0;
+
+            totalAmountEl.textContent = formatCurrency(totalAmount);
+            totalCountEl.textContent = totalCount;
+            averageAmountEl.textContent = formatCurrency(averageAmount);
+        }
+
+        // 更新图表
+        function updateCharts() {
+            // 按支付人统计
+            const payerData = {};
+            // 初始化所有支付人数据为0
+            PAYERS.forEach(payer => {
+                payerData[payer] = 0;
+            });
+            
+            expenseRecords.forEach(record => {
+                const payer = record.payer || '未知';
+                payerData[payer] = (payerData[payer] || 0) + parseFloat(record.amount);
+            });
+            
+            payerChart.data.labels = Object.keys(payerData);
+            payerChart.data.datasets[0].data = Object.values(payerData);
+            payerChart.update();
+
+            // 按项目统计（只显示前10个项目）
+            const projectData = {};
+            expenseRecords.forEach(record => {
+                projectData[record.projectName] = (projectData[record.projectName] || 0) + parseFloat(record.amount);
+            });
+            
+            // 排序并取前10
+            const sortedProjects = Object.entries(projectData)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 10);
+            
+            projectChart.data.labels = sortedProjects.map(item => item[0]);
+            projectChart.data.datasets[0].data = sortedProjects.map(item => item[1]);
+            projectChart.update();
+        }
+
+        // 打开模态框
+        function openModal(isEdit = false, recordId = null) {
+            if (isEdit && recordId) {
+                const record = expenseRecords.find(r => r.id === recordId);
+                if (record) {
+                    document.getElementById('modalTitle').textContent = '编辑费用记录';
+                    document.getElementById('recordId').value = record.id;
+                    document.getElementById('serialNumber').value = record.serialNumber;
+                    document.getElementById('projectName').value = record.projectName;
+                    document.getElementById('amount').value = record.amount;
+                    document.getElementById('payer').value = record.payer || '';
+                    document.getElementById('date').value = record.date;
+                }
+            } else {
+                // 重置表单
+                document.getElementById('modalTitle').textContent = '添加费用记录';
+                expenseForm.reset();
+                document.getElementById('recordId').value = '';
+                // 设置默认日期为今天
+                document.getElementById('date').value = new Date().toISOString().split('T')[0];
+                // 自动计算下一个序号
+                if (expenseRecords.length > 0) {
+                    const lastSerial = Math.max(...expenseRecords.map(r => r.serialNumber));
+                    document.getElementById('serialNumber').value = lastSerial + 1;
+                } else {
+                    document.getElementById('serialNumber').value = 1;
+                }
+            }
+            modal.classList.remove('hidden');
+        }
+
+        // 关闭模态框
+        function closeModalFunc() {
+            modal.classList.add('hidden');
+        }
+
+        // 编辑记录
+        function editRecord(recordId) {
+            openModal(true, recordId);
+        }
+
+        // 删除记录
+        function deleteRecord(recordId) {
+            if (confirm('确定要删除这条记录吗？')) {
+                expenseRecords = expenseRecords.filter(record => record.id !== recordId);
+                if (saveData()) {
+                    updateUI();
+                }
+            }
+        }
+
+        // 保存记录
+        function saveRecord(e) {
+            e.preventDefault();
+            
+            const recordId = document.getElementById('recordId').value;
+            const data = {
+                serialNumber: parseInt(document.getElementById('serialNumber').value),
+                projectName: document.getElementById('projectName').value,
+                amount: parseFloat(document.getElementById('amount').value),
+                payer: document.getElementById('payer').value,
+                date: document.getElementById('date').value,
+                updatedAt: new Date().toISOString()
+            };
+
+            try {
+                if (recordId) {
+                    // 更新记录
+                    const index = expenseRecords.findIndex(r => r.id === recordId);
+                    if (index !== -1) {
+                        data.id = recordId; // 保留原ID
+                        expenseRecords[index] = data;
+                    }
+                } else {
+                    // 添加新记录
+                    data.id = Date.now().toString(); // 用时间戳作为唯一ID
+                    expenseRecords.push(data);
+                }
+                
+                if (saveData()) {
+                    closeModalFunc();
+                    updateUI();
+                }
+            } catch (error) {
+                console.error('保存失败:', error);
+                alert('保存失败，请重试');
+            }
+        }
+
+        // 事件监听
+        document.addEventListener('DOMContentLoaded', () => {
+            initCharts();
+            loadData();
+
+            addBtn.addEventListener('click', () => openModal());
+            closeModal.addEventListener('click', closeModalFunc);
+            cancelBtn.addEventListener('click', closeModalFunc);
+            expenseForm.addEventListener('submit', saveRecord);
+
+            // 点击模态框外部关闭
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) {
+                    closeModalFunc();
+                }
+            });
+        });
+    </script>
+</body>
+</html>
